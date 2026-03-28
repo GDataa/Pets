@@ -1,0 +1,12 @@
+name: Pets
+version: '1.0-SNAPSHOT'
+main: dev.gdataa.hyvel.PetsMain
+api-version: '1.21'
+authors: [ GDataa ]
+description: Pets System for Hyvel
+website: hyvel.net
+
+commands:
+  pets:
+    description: Comando principal para abrir o menu de pets.
+    aliases: [pet, p]
