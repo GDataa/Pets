@@ -301,11 +301,41 @@ public class MenuManager {
         player.openInventory(gui);
     }
 
+    // === MENU DO LEILÃO ===
+    public static void openAuctionMenu(Player player) {
+        Inventory gui = Bukkit.createInventory(player, 54, "§8Leilão Ativo");
+
+        List<dev.gdataa.hyvel.shops.AuctionItem> auctions = dev.gdataa.hyvel.shops.AuctionManager.activeAuctions;
+
+        // Mostra os primeiros 45 itens do leilão
+        for (int i = 0; i < Math.min(auctions.size(), 45); i++) {
+            gui.setItem(i, auctions.get(i).getDisplayItem());
+        }
+
+        // Se não houver itens
+        if (auctions.isEmpty()) {
+            gui.setItem(22, createItem(Material.BARRIER, "§cLeilão Vazio", "§7Nenhum jogador está a leiloar", "§7itens neste momento."));
+        }
+
+        // Botões de navegação
+        String infoValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDAxYWZlOTczYzU0ODJmZjc0MjZmYzhlZTkzMjcwNTY2MWRiN2NlZmI1NjQ1YjY5YjU2ZWY5M2VkZWZmZGIzIn19fQ==";
+        gui.setItem(48, createCustomHead(infoValue, "§bComo funciona?",
+                "§7Para leiloar um item que tenhas na mão,",
+                "§7utiliza o comando:",
+                "§f/pets leilao <lance> <tempo> <coins/cash>"));
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(49, createCustomHead(voltarValue, "§cVoltar", "§7Voltar à Loja."));
+
+        // Atualiza os menus a cada segundo para o temporizador não parar enquanto o jogador olha
+        player.openInventory(gui);
+    }
+
     public static void openClothingShop(Player player) {
         Inventory gui = Bukkit.createInventory(player, 27, "§8Loja: Roupas");
 
         List<PetClothing> roupas = ShopManager.roupasAtuais;
-        int[] slots = {11, 13, 15};
+        int[] slots = {11, 12, 13, 14, 15};
 
         for (int i = 0; i < roupas.size(); i++) {
             if (i >= slots.length) break;

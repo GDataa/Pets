@@ -7,6 +7,7 @@ import dev.gdataa.hyvel.pets.PetRegistry;
 import dev.gdataa.hyvel.pets.PetVisualManager;
 import dev.gdataa.hyvel.pets.items.ClothingRegistry;
 import dev.gdataa.hyvel.pets.items.PetClothing;
+import dev.gdataa.hyvel.shops.AuctionItem;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -19,13 +20,14 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class PetsGUIListener implements Listener {
 
-    // Mapa para evitar duplo clique (Cooldown de 500ms)
     private final Map<UUID, Long> clickCooldown = new HashMap<>();
+    public static final Map<UUID, UUID> pendingBids = new HashMap<>();
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
@@ -44,13 +46,11 @@ public class PetsGUIListener implements Listener {
         event.setCancelled(true);
         Player player = (Player) event.getWhoClicked();
 
-        // --- SISTEMA ANTI DOUBLE-CLICK ---
         UUID uuid = player.getUniqueId();
         if (clickCooldown.containsKey(uuid) && System.currentTimeMillis() - clickCooldown.get(uuid) < 500) {
-            return; // Se passou menos de 500ms, ignora o clique fantasma
+            return;
         }
         clickCooldown.put(uuid, System.currentTimeMillis());
-        // ---------------------------------
 
         int slot = event.getRawSlot();
         ItemStack clickedItem = event.getCurrentItem();
@@ -74,13 +74,11 @@ public class PetsGUIListener implements Listener {
                 return;
             }
 
-            // 1. SLOTS VERDES (Desequipar ou Definir Visual)
             int greenIndex = getGreenSlotIndex(slot);
             if (greenIndex != -1) {
                 String equippedId = PetsMain.db().getEquippedPet(player.getUniqueId(), greenIndex);
 
                 if (equippedId != null) {
-                    // SE CLICOU COM O BOTÃO DIREITO (Definir Visual)
                     if (event.isRightClick()) {
                         String currentVisual = PetsMain.db().getVisualPet(player.getUniqueId());
 
@@ -94,9 +92,7 @@ public class PetsGUIListener implements Listener {
                             player.playSound(player.getLocation(), Sound.ENTITY_ILLUSIONER_CAST_SPELL, 1, 1);
                             PetVisualManager.spawnPet(player, equippedId);
                         }
-                    }
-                    // SE CLICOU COM O BOTÃO ESQUERDO (Desequipar)
-                    else if (event.isLeftClick()) {
+                    } else if (event.isLeftClick()) {
                         PetsMain.db().equipPet(player.getUniqueId(), null, greenIndex);
 
                         String currentVisual = PetsMain.db().getVisualPet(player.getUniqueId());
@@ -116,7 +112,6 @@ public class PetsGUIListener implements Listener {
                 return;
             }
 
-            // 2. EQUIPAR
             if (isCollectionSlot(slot)) {
                 String displayName = clickedItem.getItemMeta().getDisplayName();
                 PetModel clickedPet = PetRegistry.getByName(displayName);
@@ -173,22 +168,93 @@ public class PetsGUIListener implements Listener {
             }
 
             if (slot == 11) {
-                player.sendMessage("§bAbrindo loja de roupas...");
                 player.playSound(player.getLocation(), Sound.ITEM_ARMOR_EQUIP_LEATHER, 1, 1);
-                // TODO: Abrir Menu da Loja (Categoria Roupas)
+                Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
+                    MenuManager.openClothingShop(player);
+                });
             } else if (slot == 13) {
-                player.sendMessage("§eAbrindo loja de comidas...");
                 player.playSound(player.getLocation(), Sound.ENTITY_GENERIC_EAT, 1, 1);
-                // TODO: Abrir Menu da Loja (Categoria Comidas)
+                Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
+                    MenuManager.openFoodShop(player);
+                });
             } else if (slot == 15) {
-                player.sendMessage("§6Bem-vindo ao Leilão!");
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 1, 2);
-                // TODO: Abrir Menu do Leilão
+                Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
+                    MenuManager.openAuctionMenu(player);
+                });
             }
             return;
         }
 
-        // --- MENU SELETOR DE EVOLUÇÃO ---
+        // --- MENU: LEILÃO ATIVO ---
+        if (title.equals("§8Leilão Ativo")) {
+            if (slot == 49) {
+                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1, 1);
+                Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
+                    MenuManager.openPetShopMenu(player);
+                });
+                return;
+            }
+            if (slot == 48) return; // Botão de info
+
+            // Se clicou num item que está a ser leiloado
+            if (slot < 45 && clickedItem != null && clickedItem.getType() != Material.AIR) {
+
+                // Pega a lista atual de leilões
+                List<AuctionItem> auctions = dev.gdataa.hyvel.shops.AuctionManager.activeAuctions;
+
+                // Garante que o índice existe
+                if (slot < auctions.size()) {
+                    dev.gdataa.hyvel.shops.AuctionItem clickedAuction = auctions.get(slot);
+
+                    // O jogador não pode dar lance no próprio item
+                    if (clickedAuction.getSellerUuid().equals(player.getUniqueId())) {
+                        player.sendMessage("§cVocê não pode dar um lance no seu próprio item!");
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1, 1);
+                        return;
+                    }
+
+                    // Coloca o jogador no modo de "Dar Lance"
+                    pendingBids.put(player.getUniqueId(), clickedAuction.getAuctionId());
+                    player.closeInventory();
+
+                    player.sendMessage(" ");
+                    player.sendMessage("§a§lLEILÃO! §7Você selecionou um item de §f" + clickedAuction.getSellerName() + "§7.");
+                    player.sendMessage("§7Digite no chat o valor do seu lance (ou digite 'cancelar' para sair).");
+                    player.sendMessage(" ");
+                    player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1, 1);
+                }
+            }
+            return;
+        }
+
+        // --- MENUS DAS LOJAS ROTATIVAS ---
+        if (title.equals("§8Loja: Roupas") || title.equals("§8Loja: Comidas")) {
+            if (slot == 18) {
+                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1, 1);
+                Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
+                    MenuManager.openPetShopMenu(player);
+                });
+                return;
+            }
+            if (slot == 22) return; // Relógio da rotação
+
+            if (clickedItem.getType() == Material.PLAYER_HEAD) {
+                String displayName = clickedItem.getItemMeta().getDisplayName();
+
+                if (title.equals("§8Loja: Roupas")) {
+                    player.sendMessage("§aVocê tentou comprar a roupa: " + displayName);
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1, 1);
+                    // TODO: Integração Vault + DB
+                } else {
+                    player.sendMessage("§aVocê tentou comprar a comida: " + displayName);
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, 1, 1);
+                    // TODO: Integração Vault + Dar o item
+                }
+            }
+            return;
+        }
+
         if (title.equals("§8Escolha um Pet para Evoluir")) {
             if (slot == 22) {
                 player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1, 1);
@@ -213,7 +279,6 @@ public class PetsGUIListener implements Listener {
             return;
         }
 
-        // --- MENU DE PERFIL DO PET (Gerir) ---
         if (title.startsWith("§8Gerir: ")) {
             String petName = title.replace("§8Gerir: ", "").trim();
             PetModel currentPet = PetRegistry.getByName(petName);
@@ -240,7 +305,6 @@ public class PetsGUIListener implements Listener {
             return;
         }
 
-        // --- MENU: GUARDA-ROUPA ---
         if (title.startsWith("§8Guarda-Roupa: ")) {
             String petName = title.replace("§8Guarda-Roupa: ", "").trim();
             PetModel currentPet = PetRegistry.getByName(petName);
@@ -258,7 +322,6 @@ public class PetsGUIListener implements Listener {
                 String displayName = clickedItem.getItemMeta().getDisplayName();
                 if (displayName.equals("§cVoltar")) return;
 
-                // Tenta encontrar a roupa baseada no nome
                 String cleanName = displayName.replaceAll("(?i)§[0-9A-FK-ORX]", "").trim();
                 PetClothing clickedClothing = null;
                 for (PetClothing c : ClothingRegistry.getAllClothing()) {
@@ -271,20 +334,16 @@ public class PetsGUIListener implements Listener {
                 if (clickedClothing != null) {
                     String equippedClothingId = PetsMain.db().getEquippedClothing(player.getUniqueId(), currentPet.getId());
 
-                    // Se clicou na roupa que já está equipada -> Desequipa
                     if (equippedClothingId != null && equippedClothingId.equals(clickedClothing.getId())) {
                         PetsMain.db().equipClothing(player.getUniqueId(), currentPet.getId(), null);
                         player.sendMessage("§cRoupa desequipada do " + currentPet.getNome() + "!");
                         player.playSound(player.getLocation(), Sound.ITEM_ARMOR_EQUIP_LEATHER, 1, 0.5f);
-                    }
-                    // Senão -> Equipa a nova roupa
-                    else {
+                    } else {
                         PetsMain.db().equipClothing(player.getUniqueId(), currentPet.getId(), clickedClothing.getId());
                         player.sendMessage("§aVocê equipou " + clickedClothing.getNome() + " §ano pet " + currentPet.getNome() + "!");
                         player.playSound(player.getLocation(), Sound.ITEM_ARMOR_EQUIP_LEATHER, 1, 1.2f);
                     }
 
-                    // Atualiza o menu de roupas para refletir a mudança
                     Bukkit.getScheduler().runTask(org.bukkit.plugin.java.JavaPlugin.getPlugin(PetsMain.class), () -> {
                         MenuManager.openWardrobeMenu(player, currentPet.getId());
                     });
@@ -333,6 +392,63 @@ public class PetsGUIListener implements Listener {
 
             player.sendMessage("§a§lOBBA! §7O pet " + pet.getNome() + " §7foi adicionado à sua coleção!");
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 2);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerChatBid(org.bukkit.event.player.AsyncPlayerChatEvent event) {
+        Player player = event.getPlayer();
+        UUID playerUUID = player.getUniqueId();
+
+        // Se o jogador estiver no meio de um lance
+        if (pendingBids.containsKey(playerUUID)) {
+            event.setCancelled(true); // Impede que a mensagem vá para o chat público
+            String message = event.getMessage();
+
+            if (message.equalsIgnoreCase("cancelar")) {
+                pendingBids.remove(playerUUID);
+                player.sendMessage("§cLance cancelado.");
+                return;
+            }
+
+            UUID auctionId = pendingBids.get(playerUUID);
+            dev.gdataa.hyvel.shops.AuctionItem targetAuction = null;
+
+            // Procura o leilão ativo
+            for (dev.gdataa.hyvel.shops.AuctionItem a : dev.gdataa.hyvel.shops.AuctionManager.activeAuctions) {
+                if (a.getAuctionId().equals(auctionId)) {
+                    targetAuction = a;
+                    break;
+                }
+            }
+
+            if (targetAuction == null) {
+                player.sendMessage("§cEste leilão já expirou ou foi removido!");
+                pendingBids.remove(playerUUID);
+                return;
+            }
+
+            try {
+                double bidAmount = Double.parseDouble(message);
+
+                // Verifica se tem dinheiro suficiente no Vault/Economia (TODO: Integrar Vault aqui)
+                // if (!VaultUtils.hasMoney(player, bidAmount)) { player.sendMessage("§cNão tens saldo suficiente."); return; }
+
+                if (targetAuction.placeBid(playerUUID, player.getName(), bidAmount)) {
+                    player.sendMessage("§a§lLANCE ACEITO! §7Você é agora o maior licitador deste item!");
+                    player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 2);
+                    pendingBids.remove(playerUUID);
+
+                    // Avisa todos que o lance subiu
+                    Bukkit.broadcastMessage("§6[Leilão] §e" + player.getName() + " §7deu um lance de §f" + bidAmount + " §7num item!");
+                } else {
+                    player.sendMessage("§cO teu lance tem de ser maior que o lance atual!");
+                    player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1, 1);
+                }
+
+            } catch (NumberFormatException e) {
+                player.sendMessage("§cPor favor, digita apenas números (ex: 5000) ou 'cancelar'.");
+            }
         }
     }
 }

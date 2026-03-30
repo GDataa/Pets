@@ -5,6 +5,7 @@ import dev.gdataa.hyvel.menus.MenuManager;
 import dev.gdataa.hyvel.pets.PetModel;
 import dev.gdataa.hyvel.pets.PetRegistry;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -93,6 +94,60 @@ public class PetsCommand implements CommandExecutor, TabCompleter {
                 ((Player) target).closeInventory();
                 target.getPlayer().sendMessage("§cSeus dados de pets foram resetados por um administrador.");
             }
+            return true;
+        }
+
+        // --- SUBCOMANDO: LEILAO ---
+        if (args[0].equalsIgnoreCase("leilao")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("§cApenas jogadores podem usar este comando.");
+                return true;
+            }
+            Player player = (Player) sender;
+
+            if (args.length < 4) {
+                player.sendMessage("§cUso correto: /pets leilao <lance_inicial> <tempo_minutos> <coins/cash>");
+                return true;
+            }
+
+            // Pega o item que o jogador tem na mão (Para versões 1.9+, usamos getItemInMainHand)
+            ItemStack itemInHand = player.getInventory().getItemInMainHand();
+            if (itemInHand == null || itemInHand.getType() == Material.AIR) {
+                player.sendMessage("§cVocê precisa estar segurando o item que deseja leiloar!");
+                return true;
+            }
+
+            double lanceInicial;
+            long tempoMinutos;
+            try {
+                lanceInicial = Double.parseDouble(args[1]);
+                tempoMinutos = Long.parseLong(args[2]);
+            } catch (NumberFormatException e) {
+                player.sendMessage("§cO lance inicial e o tempo devem ser números válidos.");
+                return true;
+            }
+
+            if (lanceInicial <= 0 || tempoMinutos <= 0) {
+                player.sendMessage("§cOs valores devem ser maiores que zero.");
+                return true;
+            }
+
+            String moedaStr = args[3].toLowerCase();
+            if (!moedaStr.equals("coins") && !moedaStr.equals("cash")) {
+                player.sendMessage("§cA moeda deve ser 'coins' ou 'cash'.");
+                return true;
+            }
+            boolean isCash = moedaStr.equals("cash");
+
+            // Remove o item da mão do jogador
+            player.getInventory().setItemInMainHand(null);
+
+            // Cria o leilão e adiciona ao Manager
+            dev.gdataa.hyvel.shops.AuctionItem auction = new dev.gdataa.hyvel.shops.AuctionItem(
+                    player.getUniqueId(), player.getName(), itemInHand, lanceInicial, tempoMinutos, isCash);
+            dev.gdataa.hyvel.shops.AuctionManager.addAuction(auction);
+
+            Bukkit.broadcastMessage("§6§lLEILÃO! §e" + player.getName() + " §7acabou de leiloar um item mágico! Use §f/pets §7para ver.");
             return true;
         }
 

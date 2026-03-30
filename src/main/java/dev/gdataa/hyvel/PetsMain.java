@@ -48,6 +48,7 @@ public final class PetsMain extends JavaPlugin {
 
         PetVisualManager.startFollowTask(this);
         dev.gdataa.hyvel.shops.ShopManager.iniciarRotacao(this);
+        dev.gdataa.hyvel.shops.AuctionManager.startAuctionTask(this);
     }
 
     public static DatabaseManager db() { return dbManager; }
