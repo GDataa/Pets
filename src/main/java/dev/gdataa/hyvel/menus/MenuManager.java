@@ -3,6 +3,10 @@ package dev.gdataa.hyvel.menus;
 import dev.gdataa.hyvel.PetsMain;
 import dev.gdataa.hyvel.pets.PetModel;
 import dev.gdataa.hyvel.pets.PetRegistry;
+import dev.gdataa.hyvel.pets.items.ClothingRegistry;
+import dev.gdataa.hyvel.pets.items.PetClothing;
+import dev.gdataa.hyvel.pets.items.PetFood;
+import dev.gdataa.hyvel.shops.ShopManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -47,7 +51,6 @@ public class MenuManager {
                         lore.addAll(pet.getBonus());
                         lore.add("");
 
-                        // Lógica da Lore Visual
                         if (visualPetId != null && visualPetId.equals(equippedPetId)) {
                             lore.add("§d§lPET VISUAL ATIVO §d");
                             lore.add("§7(Aparecendo ao seu lado)");
@@ -147,6 +150,227 @@ public class MenuManager {
         player.openInventory(gui);
     }
 
+    public static void openPetShopMenu(Player player) {
+        Inventory gui = Bukkit.createInventory(player, 27, "§8Loja de Pets");
+
+        gui.setItem(11, createItem(Material.LEATHER_CHESTPLATE, "§bRoupas e Acessórios",
+                "§7Compre itens estéticos que fornecem",
+                "§7bónus §epermanentes §7aos seus pets.",
+                "",
+                "§eClique para abrir!"));
+
+        gui.setItem(13, createItem(Material.GOLDEN_APPLE, "§eComida e Petiscos",
+                "§7Alimente os seus pets para ativar",
+                "§7multiplicadores de status §etemporários§7.",
+                "",
+                "§eClique para abrir!"));
+
+        gui.setItem(15, createItem(Material.GOLD_INGOT, "§6Leilão de Pets",
+                "§7Compre e venda itens raros ou",
+                "§7pets com outros jogadores.",
+                "",
+                "§eClique para abrir!"));
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(22, createCustomHead(voltarValue, "§cVoltar", "§7Voltar ao Menu Principal."));
+
+        player.openInventory(gui);
+    }
+
+    public static void openEvolutionSelector(Player player) {
+        Inventory gui = Bukkit.createInventory(player, 27, "§8Escolha um Pet para Evoluir");
+
+        int[] slots = {10, 12, 14, 16};
+        boolean hasPets = false;
+
+        for (int i = 0; i < 4; i++) {
+            String equippedPetId = PetsMain.db().getEquippedPet(player.getUniqueId(), i);
+            if (equippedPetId != null) {
+                PetModel pet = PetRegistry.getById(equippedPetId);
+                if (pet != null) {
+                    gui.setItem(slots[i], createCustomHead(pet.getTextura(), "§a" + pet.getNome(),
+                            "§7Nível: §f1",
+                            "",
+                            "§eClique para gerir este pet!"));
+                    hasPets = true;
+                }
+            }
+        }
+
+        if (!hasPets) {
+            gui.setItem(13, createItem(Material.BARRIER, "§cNenhum Pet Equipado", "§7Equipe um pet no menu 'Meus Pets'", "§7antes de tentar evoluí-lo."));
+        }
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(22, createCustomHead(voltarValue, "§cVoltar", "§7Voltar ao Menu Principal."));
+
+        player.openInventory(gui);
+    }
+
+    public static void openPetProfile(Player player, String petId) {
+        PetModel pet = PetRegistry.getById(petId);
+        if (pet == null) return;
+
+        Inventory gui = Bukkit.createInventory(player, 27, "§8Gerir: " + pet.getNome());
+
+        List<String> statsLore = new ArrayList<>();
+        statsLore.add(pet.getRaridade());
+        statsLore.add("");
+        statsLore.addAll(pet.getBonus());
+        statsLore.add("");
+        statsLore.add("§bStatus de Fome: §aSatisfeito");
+        gui.setItem(13, createCustomHead(pet.getTextura(), "§6" + pet.getNome(), statsLore.toArray(new String[0])));
+
+        gui.setItem(11, createItem(Material.GOLDEN_APPLE, "§eAlimentar Pet",
+                "§7Dê comidas especiais para ativar",
+                "§7bónus temporários absurdos!",
+                "",
+                "§eClique para abrir a mochila de comida"));
+
+        String equippedClothingId = PetsMain.db().getEquippedClothing(player.getUniqueId(), petId);
+        if (equippedClothingId != null) {
+            PetClothing clothing = ClothingRegistry.getById(equippedClothingId);
+            if (clothing != null) {
+                gui.setItem(15, createCustomHead(clothing.getTexturaBase64(), "§bGuarda-Roupa",
+                        "§7Roupa Atual: §a" + clothing.getNome(),
+                        "",
+                        "§eClique para alterar ou desequipar"));
+            }
+        } else {
+            gui.setItem(15, createItem(Material.LEATHER_CHESTPLATE, "§bGuarda-Roupa",
+                    "§7Equipe itens permanentes para",
+                    "§7aumentar os status base do pet.",
+                    "",
+                    "§cNenhuma roupa equipada.",
+                    "",
+                    "§eClique para equipar algo"));
+        }
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(22, createCustomHead(voltarValue, "§cVoltar", "§7Voltar à lista de pets."));
+
+        player.openInventory(gui);
+    }
+
+    public static void openWardrobeMenu(Player player, String petId) {
+        PetModel pet = PetRegistry.getById(petId);
+        if (pet == null) return;
+
+        Inventory gui = Bukkit.createInventory(player, 54, "§8Guarda-Roupa: " + pet.getNome());
+
+        List<String> unlockedClothing = PetsMain.db().getUnlockedClothing(player.getUniqueId());
+        String equippedClothingId = PetsMain.db().getEquippedClothing(player.getUniqueId(), petId);
+
+        int[] slots = {
+                10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34,
+                37, 38, 39, 40, 41, 42, 43
+        };
+
+        int index = 0;
+        for (String clothingId : unlockedClothing) {
+            if (index >= slots.length) break;
+            PetClothing clothing = ClothingRegistry.getById(clothingId);
+            if (clothing != null) {
+                List<String> lore = new ArrayList<>();
+                lore.add(clothing.getRaridade());
+                lore.add("");
+                lore.addAll(clothing.getBonusExtra());
+                lore.add("");
+
+                if (clothing.getId().equals(equippedClothingId)) {
+                    lore.add("§a§lEQUIPADA");
+                    lore.add("§cClique para desequipar.");
+                } else {
+                    lore.add("§eClique para equipar!");
+                }
+
+                gui.setItem(slots[index], createCustomHead(clothing.getTexturaBase64(), "§b" + clothing.getNome(), lore.toArray(new String[0])));
+                index++;
+            }
+        }
+
+        if (unlockedClothing.isEmpty()) {
+            gui.setItem(22, createItem(Material.BARRIER, "§cGuarda-Roupa Vazio", "§7Você não comprou nenhuma roupa", "§7na Loja de Pets ainda!"));
+        }
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(49, createCustomHead(voltarValue, "§cVoltar", "§7Voltar ao perfil do pet."));
+
+        player.openInventory(gui);
+    }
+
+    public static void openClothingShop(Player player) {
+        Inventory gui = Bukkit.createInventory(player, 27, "§8Loja: Roupas");
+
+        List<PetClothing> roupas = ShopManager.roupasAtuais;
+        int[] slots = {11, 13, 15};
+
+        for (int i = 0; i < roupas.size(); i++) {
+            if (i >= slots.length) break;
+            PetClothing roupa = roupas.get(i);
+
+            List<String> lore = new ArrayList<>();
+            lore.add(roupa.getRaridade());
+            lore.add("");
+            lore.addAll(roupa.getBonusExtra());
+            lore.add("");
+            lore.add("§7Preço: §6" + roupa.getPreco() + " Coins");
+            lore.add("");
+
+            if (PetsMain.db().getUnlockedClothing(player.getUniqueId()).contains(roupa.getId())) {
+                lore.add("§cVocê já possui esta roupa!");
+            } else {
+                lore.add("§a§lCLIQUE PARA COMPRAR");
+            }
+
+            gui.setItem(slots[i], createCustomHead(roupa.getTexturaBase64(), roupa.getNome(), lore.toArray(new String[0])));
+        }
+
+        gui.setItem(22, createItem(Material.CLOCK, "§ePróxima Rotação",
+                "§7A loja atualiza os seus itens em:",
+                "§f" + ShopManager.getTempoRestanteFormatado()));
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(18, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
+
+        player.openInventory(gui);
+    }
+
+    public static void openFoodShop(Player player) {
+        Inventory gui = Bukkit.createInventory(player, 27, "§8Loja: Comidas");
+
+        List<PetFood> comidas = ShopManager.comidasAtuais;
+        int[] slots = {11, 12, 13, 14, 15};
+
+        for (int i = 0; i < comidas.size(); i++) {
+            if (i >= slots.length) break;
+            PetFood comida = comidas.get(i);
+
+            List<String> lore = new ArrayList<>();
+            lore.add(comida.getRaridade());
+            lore.add("");
+            lore.addAll(comida.getBonusTemporario());
+            lore.add("");
+            lore.add("§7Duração: §b" + comida.getDuracaoMinutos() + " minutos");
+            lore.add("§7Preço: §6" + comida.getPreco() + " Coins");
+            lore.add("");
+            lore.add("§a§lCLIQUE PARA COMPRAR");
+
+            gui.setItem(slots[i], createCustomHead(comida.getTexturaBase64(), comida.getNome(), lore.toArray(new String[0])));
+        }
+
+        gui.setItem(22, createItem(Material.CLOCK, "§ePróxima Rotação",
+                "§7A loja atualiza os seus itens em:",
+                "§f" + ShopManager.getTempoRestanteFormatado()));
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(18, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
+
+        player.openInventory(gui);
+    }
+
     public static int getMaxPets(Player player) {
         if (player.hasPermission("hyvel.pets.5")) return 5;
         if (player.hasPermission("hyvel.pets.4")) return 4;
@@ -184,7 +408,7 @@ public class MenuManager {
                 textures.setSkin(new URL(url));
                 profile.setTextures(textures);
             } catch (Exception e) {
-                Bukkit.getLogger().warning("Erro ao carregar textura Base64 para o pet: " + name);
+                Bukkit.getLogger().warning("Erro ao carregar textura Base64 para o item: " + name);
             }
 
             meta.setOwnerProfile(profile);

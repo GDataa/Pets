@@ -17,107 +17,123 @@ import java.util.UUID;
 
 public class PetVisualManager {
 
-    // Guarda os ArmorStands ativos de cada jogador
-    private static final Map<UUID, ArmorStand> activePets = new HashMap<>();
+    // Criamos uma mini-classe para agrupar as duas partes do pet
+    private static class ActivePet {
+        ArmorStand headStand;
+        ArmorStand nameStand;
+
+        public ActivePet(ArmorStand headStand, ArmorStand nameStand) {
+            this.headStand = headStand;
+            this.nameStand = nameStand;
+        }
+
+        public void remove() {
+            if (headStand != null && !headStand.isDead()) headStand.remove();
+            if (nameStand != null && !nameStand.isDead()) nameStand.remove();
+        }
+
+        public boolean isDead() {
+            return headStand.isDead() || nameStand.isDead();
+        }
+    }
+
+    // Agora guardamos o ActivePet (que contém os dois ArmorStands)
+    private static final Map<UUID, ActivePet> activePets = new HashMap<>();
 
     public static void spawnPet(Player player, String petId) {
-        despawnPet(player.getUniqueId()); // Remove se já existir um
+        despawnPet(player.getUniqueId());
 
         PetModel pet = PetRegistry.getById(petId);
         if (pet == null) return;
 
         Location loc = player.getLocation();
-        ArmorStand stand = (ArmorStand) loc.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
 
-        // Configurações do ArmorStand para ser um "Pet"
-        stand.setVisible(false);
-        stand.setInvulnerable(true);
-        stand.setGravity(false);
-        stand.setSmall(true);
-        stand.setBasePlate(false);
-        stand.setArms(false);
-        stand.setMarker(true); // Otimiza a hitbox (não atrapalha os cliques do jogador)
+        // 1. ArmorStand da Cabeça (Textura)
+        ArmorStand headStand = (ArmorStand) loc.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
+        headStand.setVisible(false);
+        headStand.setInvulnerable(true);
+        headStand.setGravity(false);
+        headStand.setSmall(true);
+        headStand.setBasePlate(false);
+        headStand.setArms(false);
+        headStand.setMarker(true); // Impede que bloqueie cliques do jogador
 
-        // Nome flutuante
-        stand.setCustomName("§a" + pet.getNome());
-        stand.setCustomNameVisible(true);
-
-        // Equipar a cabeça do pet
         ItemStack petHead = MenuManager.createCustomHead(pet.getTextura(), "pet");
-        stand.getEquipment().setHelmet(petHead);
+        headStand.getEquipment().setHelmet(petHead);
 
-        activePets.put(player.getUniqueId(), stand);
+        // 2. ArmorStand do Nome (Holograma)
+        ArmorStand nameStand = (ArmorStand) loc.getWorld().spawnEntity(loc.clone().add(0, 0.7, 0), EntityType.ARMOR_STAND);
+        nameStand.setVisible(false);
+        nameStand.setInvulnerable(true);
+        nameStand.setGravity(false);
+        nameStand.setSmall(true);
+        nameStand.setMarker(true);
+        nameStand.setCustomName("§a" + pet.getNome());
+        nameStand.setCustomNameVisible(true);
+
+        activePets.put(player.getUniqueId(), new ActivePet(headStand, nameStand));
     }
 
     public static void despawnPet(UUID uuid) {
         if (activePets.containsKey(uuid)) {
-            ArmorStand stand = activePets.get(uuid);
-            if (stand != null && !stand.isDead()) {
-                stand.remove();
-            }
+            activePets.get(uuid).remove();
             activePets.remove(uuid);
         }
     }
 
     public static void despawnAll() {
-        for (ArmorStand stand : activePets.values()) {
-            if (stand != null && !stand.isDead()) stand.remove();
+        for (ActivePet pet : activePets.values()) {
+            pet.remove();
         }
         activePets.clear();
     }
 
-    // O "Motor" que faz os pets seguirem os jogadores com efeito de flutuação
     public static void startFollowTask(PetsMain plugin) {
         new BukkitRunnable() {
             @Override
             public void run() {
-                for (Map.Entry<UUID, ArmorStand> entry : activePets.entrySet()) {
+                for (Map.Entry<UUID, ActivePet> entry : activePets.entrySet()) {
                     Player player = Bukkit.getPlayer(entry.getKey());
-                    ArmorStand pet = entry.getValue();
+                    ActivePet pet = entry.getValue();
 
-                    // Se o jogador saiu ou o pet sumiu, removemos da lista
                     if (player == null || !player.isOnline() || pet.isDead()) {
                         pet.remove();
                         continue;
                     }
 
-                    // Se o jogador mudou de mundo, o pet precisa de ser teleportado instantaneamente para o mesmo mundo
-                    if (!pet.getWorld().equals(player.getWorld())) {
-                        pet.teleport(player.getLocation());
+                    if (!pet.headStand.getWorld().equals(player.getWorld())) {
+                        pet.headStand.teleport(player.getLocation());
+                        pet.nameStand.teleport(player.getLocation());
                     }
 
                     Location pLoc = player.getLocation();
                     double yaw = Math.toRadians(pLoc.getYaw());
 
-                    // Posição base: Atrás e um pouco para o lado
                     double offsetX = -Math.cos(yaw) * 1.0;
                     double offsetZ = -Math.sin(yaw) * 1.0;
-
-                    // --- EFEITO DE FLUTUAÇÃO (Seno) ---
-                    // System.currentTimeMillis() / 400.0 controla a velocidade do sobe/desce
-                    // * 0.15 controla a altura máxima da flutuação
                     double floatOffset = Math.sin(System.currentTimeMillis() / 400.0) * 0.15;
 
-                    // Aplicamos a altura base (1.2) + o efeito de flutuação
                     Location targetLoc = pLoc.clone().add(offsetX, 1.2 + floatOffset, offsetZ);
-                    targetLoc.setYaw(pLoc.getYaw()); // Pet olha para onde o player olha
+                    targetLoc.setYaw(pLoc.getYaw());
 
-                    Location currentLoc = pet.getLocation();
+                    Location currentLoc = pet.headStand.getLocation();
 
-                    // Se o jogador estiver muito longe (ex: usou /tp ou voou muito rápido), teleporta direto
-                    if (currentLoc.distanceSquared(targetLoc) > 100) { // Usar distanceSquared é melhor para performance
-                        pet.teleport(targetLoc);
+                    if (currentLoc.distanceSquared(targetLoc) > 100) {
+                        pet.headStand.teleport(targetLoc);
+                        pet.nameStand.teleport(targetLoc.clone().add(0, 0.7, 0)); // Nome sempre 0.7 blocos acima
                     } else {
-                        // Movimento suave (Interpolação)
                         Vector direction = targetLoc.toVector().subtract(currentLoc.toVector());
-                        // O 0.3 dita a suavidade de quão rápido ele tenta alcançar o targetLoc
                         currentLoc.add(direction.multiply(0.3));
                         currentLoc.setYaw(pLoc.getYaw());
 
-                        pet.teleport(currentLoc);
+                        pet.headStand.teleport(currentLoc);
+
+                        // Teleporta o nome um pouco acima da cabeça para o efeito perfeito
+                        Location nameLoc = currentLoc.clone().add(0, 0.9, 0);
+                        pet.nameStand.teleport(nameLoc);
                     }
                 }
             }
-        }.runTaskTimer(plugin, 1L, 1L); // Roda a cada tick (20 vezes por segundo)
+        }.runTaskTimer(plugin, 1L, 1L);
     }
 }

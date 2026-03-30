@@ -14,6 +14,13 @@ public final class PetsMain extends JavaPlugin {
     @Override
     public void onEnable() {
 
+        // Grava a config.yml padrão se ela não existir
+        saveDefaultConfig();
+
+        // Carrega os itens da config para a memória
+        dev.gdataa.hyvel.pets.items.ClothingRegistry.loadFromConfig(getConfig());
+        dev.gdataa.hyvel.pets.items.FoodRegistry.loadFromConfig(getConfig());
+
         // CRIA A PASTA DO PLUGIN CASO NÃO EXISTA
         if (!getDataFolder().exists()) {
             getDataFolder().mkdirs();
@@ -40,6 +47,7 @@ public final class PetsMain extends JavaPlugin {
         Bukkit.getConsoleSender().sendMessage(" ");
 
         PetVisualManager.startFollowTask(this);
+        dev.gdataa.hyvel.shops.ShopManager.iniciarRotacao(this);
     }
 
     public static DatabaseManager db() { return dbManager; }

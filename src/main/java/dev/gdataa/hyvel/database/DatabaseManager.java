@@ -32,6 +32,7 @@ public class DatabaseManager {
 
     private void createTables() throws SQLException {
         try (Statement s = connection.createStatement()) {
+            // --- TABELAS DOS PETS ---
             s.execute("CREATE TABLE IF NOT EXISTS unlocked_pets (" +
                     "uuid VARCHAR(36), " +
                     "pet_id VARCHAR(32))");
@@ -42,12 +43,26 @@ public class DatabaseManager {
                     "pet_id VARCHAR(32), " +
                     "PRIMARY KEY (player_uuid, slot_index))");
 
-            // NOVA TABELA: Pet Visual
             s.execute("CREATE TABLE IF NOT EXISTS visual_pets (" +
                     "player_uuid VARCHAR(36) PRIMARY KEY, " +
                     "pet_id VARCHAR(32))");
+
+            // --- TABELAS DAS ROUPAS (NOVO) ---
+            s.execute("CREATE TABLE IF NOT EXISTS unlocked_clothing (" +
+                    "uuid VARCHAR(36), " +
+                    "clothing_id VARCHAR(32))");
+
+            s.execute("CREATE TABLE IF NOT EXISTS equipped_clothing (" +
+                    "player_uuid VARCHAR(36), " +
+                    "pet_id VARCHAR(32), " +
+                    "clothing_id VARCHAR(32), " +
+                    "PRIMARY KEY (player_uuid, pet_id))");
         }
     }
+
+    // =========================================
+    //             MÉTODOS DOS PETS
+    // =========================================
 
     public List<String> getUnlockedPets(UUID uuid) {
         List<String> list = new ArrayList<>();
@@ -99,7 +114,6 @@ public class DatabaseManager {
         }
     }
 
-    // --- MÉTODOS DO PET VISUAL ---
     public String getVisualPet(UUID uuid) {
         String sql = "SELECT pet_id FROM visual_pets WHERE player_uuid = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -122,6 +136,63 @@ public class DatabaseManager {
             try (PreparedStatement ps = connection.prepareStatement(sql)) {
                 ps.setString(1, uuid.toString());
                 ps.setString(2, petId);
+                ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        }
+    }
+
+    // =========================================
+    //            MÉTODOS DAS ROUPAS
+    // =========================================
+
+    public List<String> getUnlockedClothing(UUID uuid) {
+        List<String> list = new ArrayList<>();
+        String sql = "SELECT clothing_id FROM unlocked_clothing WHERE uuid = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) list.add(rs.getString("clothing_id"));
+        } catch (SQLException e) { e.printStackTrace(); }
+        return list;
+    }
+
+    public void unlockClothing(UUID uuid, String clothingId) {
+        // Primeiro verifica se o jogador já tem esta roupa para não duplicar na base de dados
+        if (getUnlockedClothing(uuid).contains(clothingId)) return;
+
+        String sql = "INSERT INTO unlocked_clothing (uuid, clothing_id) VALUES (?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, clothingId);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    public String getEquippedClothing(UUID uuid, String petId) {
+        String sql = "SELECT clothing_id FROM equipped_clothing WHERE player_uuid = ? AND pet_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, petId);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getString("clothing_id");
+        } catch (SQLException e) { e.printStackTrace(); }
+        return null;
+    }
+
+    public void equipClothing(UUID uuid, String petId, String clothingId) {
+        if (clothingId == null) {
+            String sql = "DELETE FROM equipped_clothing WHERE player_uuid = ? AND pet_id = ?";
+            try (PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, petId);
+                ps.executeUpdate();
+            } catch (SQLException e) { e.printStackTrace(); }
+        } else {
+            String sql = "INSERT OR REPLACE INTO equipped_clothing (player_uuid, pet_id, clothing_id) VALUES (?, ?, ?)";
+            try (PreparedStatement ps = connection.prepareStatement(sql)) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, petId);
+                ps.setString(3, clothingId);
                 ps.executeUpdate();
             } catch (SQLException e) { e.printStackTrace(); }
         }
