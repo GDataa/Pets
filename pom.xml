@@ -55,6 +55,10 @@
             <id>spigotmc-repo</id>
             <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
         </repository>
+        <repository>
+            <id>ystoreplugins</id>
+            <url>https://repo.ystoreplugins.com.br/releases/</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -62,6 +66,12 @@
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
             <version>1.21.4-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.ystoreplugins</groupId>
+            <artifactId>yplugins</artifactId>
+            <version>3.6.4</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>

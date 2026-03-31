@@ -5,6 +5,8 @@ api-version: '1.21'
 authors: [ GDataa ]
 description: Pets System for Hyvel
 website: hyvel.net
+softdepend:
+  - yPlugins
 
 commands:
   pets:

@@ -57,6 +57,18 @@ public class DatabaseManager {
                     "pet_id VARCHAR(32), " +
                     "clothing_id VARCHAR(32), " +
                     "PRIMARY KEY (player_uuid, pet_id))");
+
+            // Tabela de Comidas Ativas (Bónus Temporário)
+            s.execute("CREATE TABLE IF NOT EXISTS active_food_buffs (" +
+                    "player_uuid VARCHAR(36), " +
+                    "pet_id VARCHAR(32), " +
+                    "food_id VARCHAR(32), " +
+                    "expire_time BIGINT, " +
+                    "PRIMARY KEY (player_uuid, pet_id))");
+
+            s.execute("CREATE TABLE IF NOT EXISTS unlocked_food (" +
+                    "uuid VARCHAR(36), " +
+                    "food_id VARCHAR(32))");
         }
     }
 
@@ -196,6 +208,73 @@ public class DatabaseManager {
                 ps.executeUpdate();
             } catch (SQLException e) { e.printStackTrace(); }
         }
+    }
+
+    // =========================================
+    //            MÉTODOS DAS COMIDAS (BUFFS)
+    // =========================================
+
+    public void feedPet(UUID uuid, String petId, String foodId, long durationMillis) {
+        long expireTime = System.currentTimeMillis() + durationMillis;
+        String sql = "INSERT OR REPLACE INTO active_food_buffs (player_uuid, pet_id, food_id, expire_time) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, petId);
+            ps.setString(3, foodId);
+            ps.setLong(4, expireTime);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    // Retorna o ID da comida ativa. Se já tiver expirado, limpa-a e retorna null.
+    public String getActiveFoodBuff(UUID uuid, String petId) {
+        String sql = "SELECT food_id, expire_time FROM active_food_buffs WHERE player_uuid = ? AND pet_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, petId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                long expireTime = rs.getLong("expire_time");
+                if (System.currentTimeMillis() > expireTime) {
+                    // O tempo acabou! Limpa da base de dados.
+                    removeFoodBuff(uuid, petId);
+                    return null;
+                }
+                return rs.getString("food_id");
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return null;
+    }
+
+    public void removeFoodBuff(UUID uuid, String petId) {
+        String sql = "DELETE FROM active_food_buffs WHERE player_uuid = ? AND pet_id = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, petId);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
+    }
+
+    public List<String> getUnlockedFood(UUID uuid) {
+        List<String> list = new ArrayList<>();
+        String sql = "SELECT food_id FROM unlocked_food WHERE uuid = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) list.add(rs.getString("food_id"));
+        } catch (SQLException e) { e.printStackTrace(); }
+        return list;
+    }
+
+    public void unlockFood(UUID uuid, String foodId) {
+        if (getUnlockedFood(uuid).contains(foodId)) return;
+        String sql = "INSERT INTO unlocked_food (uuid, food_id) VALUES (?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, uuid.toString());
+            ps.setString(2, foodId);
+            ps.executeUpdate();
+        } catch (SQLException e) { e.printStackTrace(); }
     }
 
     public Connection getConnection() { return connection; }

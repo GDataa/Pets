@@ -49,6 +49,12 @@ public final class PetsMain extends JavaPlugin {
         PetVisualManager.startFollowTask(this);
         dev.gdataa.hyvel.shops.ShopManager.iniciarRotacao(this);
         dev.gdataa.hyvel.shops.AuctionManager.startAuctionTask(this);
+
+        if (!dev.gdataa.hyvel.shops.EconomyManager.setupEconomy()) {
+            getLogger().warning("yEconomias não encontrado! A loja e o leilão podem não funcionar corretamente.");
+        } else {
+            getLogger().info("yEconomias conectado com sucesso aos Pets!");
+        }
     }
 
     public static DatabaseManager db() { return dbManager; }

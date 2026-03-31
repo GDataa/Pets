@@ -218,7 +218,13 @@ public class MenuManager {
         statsLore.add("");
         statsLore.addAll(pet.getBonus());
         statsLore.add("");
-        statsLore.add("§bStatus de Fome: §aSatisfeito");
+        String activeFoodId = PetsMain.db().getActiveFoodBuff(player.getUniqueId(), petId);
+        if (activeFoodId != null) {
+            dev.gdataa.hyvel.pets.items.PetFood food = dev.gdataa.hyvel.pets.items.FoodRegistry.getById(activeFoodId);
+            statsLore.add("§bEfeito Ativo: §e" + (food != null ? food.getNome() : "Desconhecido"));
+        } else {
+            statsLore.add("§bEfeito Ativo: §7Nenhum");
+        }
         gui.setItem(13, createCustomHead(pet.getTextura(), "§6" + pet.getNome(), statsLore.toArray(new String[0])));
 
         gui.setItem(11, createItem(Material.GOLDEN_APPLE, "§eAlimentar Pet",
@@ -301,23 +307,108 @@ public class MenuManager {
         player.openInventory(gui);
     }
 
-    // === MENU DO LEILÃO ===
-    public static void openAuctionMenu(Player player) {
-        Inventory gui = Bukkit.createInventory(player, 54, "§8Leilão Ativo");
+    public static void openFoodBackpack(Player player, String petId) {
+        PetModel pet = PetRegistry.getById(petId);
+        if (pet == null) return;
+
+        Inventory gui = Bukkit.createInventory(player, 54, "§8Comida: " + pet.getNome());
+
+        List<String> unlockedFood = PetsMain.db().getUnlockedFood(player.getUniqueId());
+        String activeFoodId = PetsMain.db().getActiveFoodBuff(player.getUniqueId(), petId);
+
+        int[] slots = {
+                10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34,
+                37, 38, 39, 40, 41, 42, 43
+        };
+
+        int index = 0;
+        for (String foodId : unlockedFood) {
+            if (index >= slots.length) break;
+            dev.gdataa.hyvel.pets.items.PetFood food = dev.gdataa.hyvel.pets.items.FoodRegistry.getById(foodId);
+            if (food != null) {
+                List<String> lore = new ArrayList<>();
+                lore.add(food.getRaridade());
+                lore.add("");
+                lore.addAll(food.getBonusTemporario());
+                lore.add("");
+                lore.add("§7Duração: §b" + food.getDuracaoMinutos() + "m");
+                lore.add("");
+
+                if (food.getId().equals(activeFoodId)) {
+                    lore.add("§a§lALIMENTO ATIVO");
+                    lore.add("§7O pet está a digerir isto...");
+                } else {
+                    lore.add("§eClique para alimentar!");
+                }
+
+                gui.setItem(slots[index], createCustomHead(food.getTexturaBase64(), "§e" + food.getNome(), lore.toArray(new String[0])));
+                index++;
+            }
+        }
+
+        if (unlockedFood.isEmpty()) {
+            gui.setItem(22, createItem(Material.BARRIER, "§cMochila Vazia", "§7Compre comidas na Loja de Pets!"));
+        }
+
+        String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
+        gui.setItem(49, createCustomHead(voltarValue, "§cVoltar", "§7Voltar ao perfil do pet."));
+
+        player.openInventory(gui);
+    }
+
+    // Slots centrais perfeitos para a montra do leilão
+    public static final int[] AUCTION_SLOTS = {
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34,
+            37, 38, 39, 40, 41, 42, 43
+    };
+
+    // === MENU DO LEILÃO (PAGINADO) ===
+    public static void openAuctionMenu(Player player, int page) {
+        Inventory gui = Bukkit.createInventory(player, 54, "§8Leilão Ativo - Pág. " + page);
 
         List<dev.gdataa.hyvel.shops.AuctionItem> auctions = dev.gdataa.hyvel.shops.AuctionManager.activeAuctions;
 
-        // Mostra os primeiros 45 itens do leilão
-        for (int i = 0; i < Math.min(auctions.size(), 45); i++) {
-            gui.setItem(i, auctions.get(i).getDisplayItem());
+        // Calcula o total de páginas
+        int totalPages = (int) Math.ceil((double) auctions.size() / AUCTION_SLOTS.length);
+        if (totalPages == 0) totalPages = 1;
+
+        // Segurança para não quebrar a página
+        if (page > totalPages) page = totalPages;
+        if (page < 1) page = 1;
+
+        int startIndex = (page - 1) * AUCTION_SLOTS.length;
+
+        // Preenche os slots disponíveis com os itens daquela página
+        for (int i = 0; i < AUCTION_SLOTS.length; i++) {
+            int auctionIndex = startIndex + i;
+            if (auctionIndex < auctions.size()) {
+                gui.setItem(AUCTION_SLOTS[i], auctions.get(auctionIndex).getDisplayItem());
+            }
         }
 
-        // Se não houver itens
         if (auctions.isEmpty()) {
             gui.setItem(22, createItem(Material.BARRIER, "§cLeilão Vazio", "§7Nenhum jogador está a leiloar", "§7itens neste momento."));
         }
 
-        // Botões de navegação
+        // ===================================
+        //        SISTEMA DE PAGINAÇÃO
+        // ===================================
+        if (page > 1) {
+            String prevHead = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODY1MmM2ZWI2YmJiMWRiNGExMjEzYzU4ZWNkNDk1MTdlMjk2ZDM5OGM1Mjg2YWU0N2RmNWVlZTNmZWU2NjM4ZSJ9fX0=";
+            gui.setItem(27, createCustomHead(prevHead, "§ePágina Anterior", "§7Ir para a página " + (page - 1)));
+        }
+
+        if (page < totalPages) {
+            String nextHead = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZjk0NmEzMDlkMWU5ZTYxYzg4NTI4MjMxZTk2NWZkNDg2YmNjNDcxYjE1OWI3MzhjODg5ZmQ3NWY0ZjFiZmRlNCJ9fX0=";
+            gui.setItem(35, createCustomHead(nextHead, "§ePróxima Página", "§7Ir para a página " + (page + 1)));
+        }
+
+        // ===================================
+
         String infoValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZDAxYWZlOTczYzU0ODJmZjc0MjZmYzhlZTkzMjcwNTY2MWRiN2NlZmI1NjQ1YjY5YjU2ZWY5M2VkZWZmZGIzIn19fQ==";
         gui.setItem(48, createCustomHead(infoValue, "§bComo funciona?",
                 "§7Para leiloar um item que tenhas na mão,",
@@ -327,15 +418,16 @@ public class MenuManager {
         String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
         gui.setItem(49, createCustomHead(voltarValue, "§cVoltar", "§7Voltar à Loja."));
 
-        // Atualiza os menus a cada segundo para o temporizador não parar enquanto o jogador olha
         player.openInventory(gui);
     }
 
     public static void openClothingShop(Player player) {
-        Inventory gui = Bukkit.createInventory(player, 27, "§8Loja: Roupas");
+        Inventory gui = Bukkit.createInventory(player, 45, "§8Loja: Roupas");
 
         List<PetClothing> roupas = ShopManager.roupasAtuais;
-        int[] slots = {11, 12, 13, 14, 15};
+        int[] slots = {10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34};
 
         for (int i = 0; i < roupas.size(); i++) {
             if (i >= slots.length) break;
@@ -358,21 +450,23 @@ public class MenuManager {
             gui.setItem(slots[i], createCustomHead(roupa.getTexturaBase64(), roupa.getNome(), lore.toArray(new String[0])));
         }
 
-        gui.setItem(22, createItem(Material.CLOCK, "§ePróxima Rotação",
+        gui.setItem(40, createItem(Material.CLOCK, "§ePróxima Rotação",
                 "§7A loja atualiza os seus itens em:",
                 "§f" + ShopManager.getTempoRestanteFormatado()));
 
         String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
-        gui.setItem(18, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
+        gui.setItem(39, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
 
         player.openInventory(gui);
     }
 
     public static void openFoodShop(Player player) {
-        Inventory gui = Bukkit.createInventory(player, 27, "§8Loja: Comidas");
+        Inventory gui = Bukkit.createInventory(player, 45, "§8Loja: Comidas");
 
         List<PetFood> comidas = ShopManager.comidasAtuais;
-        int[] slots = {11, 12, 13, 14, 15};
+        int[] slots = {10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34};
 
         for (int i = 0; i < comidas.size(); i++) {
             if (i >= slots.length) break;
@@ -391,12 +485,12 @@ public class MenuManager {
             gui.setItem(slots[i], createCustomHead(comida.getTexturaBase64(), comida.getNome(), lore.toArray(new String[0])));
         }
 
-        gui.setItem(22, createItem(Material.CLOCK, "§ePróxima Rotação",
+        gui.setItem(40, createItem(Material.CLOCK, "§ePróxima Rotação",
                 "§7A loja atualiza os seus itens em:",
                 "§f" + ShopManager.getTempoRestanteFormatado()));
 
         String voltarValue = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNzZhOGQyOTIxOWUyYzljODQ5NTQ2OTNiODdmMzdhZWNlM2MyNzFkNTdmYjZhMmQ3MWZhZmUzOWYwYjgwNDAifX19";
-        gui.setItem(18, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
+        gui.setItem(39, createCustomHead(voltarValue, "§cVoltar", "§7Voltar às categorias."));
 
         player.openInventory(gui);
     }
